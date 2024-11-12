@@ -1,0 +1,77 @@
+# sql 입출력 할 수 있게끔
+import streamlit as st
+import pymysql
+import pandas as pd
+
+# MySQL 연결 함수
+def connect_to_database():
+    return pymysql.connect(
+        user='root',
+        passwd='Alsrb0315!',
+        host='192.168.127.128',
+        db='TESTDB',
+        charset='utf8'
+    )
+
+# 알레르기 정보를 데이터베이스에 삽입하는 함수
+def insert_allergy_info(allergen, risk_level):
+    dbConn = connect_to_database()
+    cursor = dbConn.cursor()
+    sql = "INSERT INTO allergy_info (allergen, risk_level) VALUES (%s, %s) ON DUPLICATE KEY UPDATE risk_level = VALUES(risk_level)"
+    cursor.execute(sql, (allergen, risk_level))
+    dbConn.commit()
+    cursor.close()
+    dbConn.close()
+
+# 그룹별로 알레르기 정보를 조회하는 함수
+def get_allergy_info_grouped():
+    dbConn = connect_to_database()
+    cursor = dbConn.cursor(pymysql.cursors.DictCursor)
+    sql = "SELECT allergen, risk_level FROM allergy_info ORDER BY risk_level"
+    cursor.execute(sql)
+    result = cursor.fetchall()
+    cursor.close()
+    dbConn.close()
+    
+    # DataFrame으로 변환하여 그룹별로 나눔
+    df = pd.DataFrame(result)
+    if not df.empty:
+        grouped = {
+            "High Risk Group": df[df['risk_level'] == 'High Risk Group'],
+            "Risk Group": df[df['risk_level'] == 'Risk Group'],
+            "Caution Group": df[df['risk_level'] == 'Caution Group']
+        }
+    else:
+        grouped = {"High Risk Group": pd.DataFrame(), "Risk Group": pd.DataFrame(), "Caution Group": pd.DataFrame()}
+    return grouped
+
+# Streamlit 앱 구성
+st.title("알레르기 정보 관리")
+
+# 알레르기 정보 입력 섹션
+st.subheader("알레르기 정보 입력")
+allergen = st.text_input("알레르기 성분을 입력하세요 (예: 땅콩, 우유)")
+
+# 위험 그룹 선택
+risk_level = st.selectbox("위험 그룹을 선택하세요", ("High Risk Group", "Risk Group", "Caution Group"))
+
+if st.button("알레르기 정보 추가"):
+    if allergen and risk_level:
+        insert_allergy_info(allergen, risk_level)
+        st.success("알레르기 정보가 추가되었습니다!")
+    else:
+        st.error("알레르기 성분과 위험 그룹을 모두 입력해주세요.")
+
+# 저장된 알레르기 정보 표시 및 그룹별 출력
+st.subheader("저장된 알레르기 정보 목록")
+
+# 그룹별로 알레르기 정보 가져오기
+allergy_data_grouped = get_allergy_info_grouped()
+
+# 그룹별로 테이블 표시
+for group, data in allergy_data_grouped.items():
+    st.write(f"### {group}")
+    if not data.empty:
+        st.table(data[['allergen']])  # 알레르기 성분만 표시
+    else:
+        st.write("해당 그룹에 저장된 알레르기 정보가 없습니다.")
